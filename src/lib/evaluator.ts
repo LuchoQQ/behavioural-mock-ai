@@ -106,51 +106,77 @@ const ALLOWED_RED_LABELS = new Set<string>([
   'no_quantified_impact_when_warranted',
 ]);
 
-// Drops any flag whose label is outside the bounded vocabulary, along with the
-// matching annotation on the segment that carried that flag's id. Segment
-// text is preserved — only the `flag`/`id` keys are stripped.
+// Two-phase cleanup of the LLM's per-question flag output before invariant
+// checks: (1) drop cards with off-vocab labels, (2) reconcile IDs between
+// cards and segment annotations so a hallucinated id on either side doesn't
+// kill the whole evaluation.
 function dropOffVocabFlags(
   q: PerQuestionEvalT,
   sessionId: string,
   questionNum: number | string,
 ): PerQuestionEvalT {
-  const droppedGreen = q.green_flags
+  // Phase 1: drop cards whose label isn't in the bounded vocabulary.
+  const droppedGreenLabels = q.green_flags
     .filter((f) => !ALLOWED_GREEN_LABELS.has(f.label))
     .map((f) => f.label);
-  const droppedRed = q.red_flags
+  const droppedRedLabels = q.red_flags
     .filter((f) => !ALLOWED_RED_LABELS.has(f.label))
     .map((f) => f.label);
 
-  if (droppedGreen.length === 0 && droppedRed.length === 0) return q;
+  if (droppedGreenLabels.length > 0 || droppedRedLabels.length > 0) {
+    console.warn('[evaluator] dropped off-vocab flags', {
+      sessionId,
+      question: `Q${questionNum}`,
+      droppedGreen: droppedGreenLabels,
+      droppedRed: droppedRedLabels,
+    });
+  }
 
-  console.warn('[evaluator] dropped off-vocab flags', {
-    sessionId,
-    question: `Q${questionNum}`,
-    droppedGreen,
-    droppedRed,
-  });
+  const vocabGreen = q.green_flags.filter((f) => ALLOWED_GREEN_LABELS.has(f.label));
+  const vocabRed = q.red_flags.filter((f) => ALLOWED_RED_LABELS.has(f.label));
 
-  const keptGreen = q.green_flags.filter((f) => ALLOWED_GREEN_LABELS.has(f.label));
-  const keptRed = q.red_flags.filter((f) => ALLOWED_RED_LABELS.has(f.label));
-  const keptIds = new Set<string>([
-    ...keptGreen.map((f) => f.id),
-    ...keptRed.map((f) => f.id),
-  ]);
+  // Phase 2: reconcile card IDs with segment IDs.
+  // Strip any segment annotation whose id doesn't have a matching card of the
+  // same color; then drop any card whose id isn't referenced by any segment.
+  // This handles the model emitting orphan ids on either side.
+  const vocabGreenIds = new Set(vocabGreen.map((f) => f.id));
+  const vocabRedIds = new Set(vocabRed.map((f) => f.id));
 
   const cleanedSegments: AnswerSegmentT[] = q.answer_segments.map((s) => {
-    if (s.flag != null && s.id != null && !keptIds.has(s.id)) {
-      // Strip the annotation but keep the literal text so the transcript still
-      // reconstructs byte-for-byte.
+    if (s.flag === 'green' && s.id != null && vocabGreenIds.has(s.id)) return s;
+    if (s.flag === 'red' && s.id != null && vocabRedIds.has(s.id)) return s;
+    if (s.flag != null || s.id != null) {
       return { t: s.t };
     }
     return s;
   });
 
+  const refGreenIds = new Set<string>();
+  const refRedIds = new Set<string>();
+  for (const s of cleanedSegments) {
+    if (s.flag === 'green' && s.id) refGreenIds.add(s.id);
+    if (s.flag === 'red' && s.id) refRedIds.add(s.id);
+  }
+
+  const finalGreen = vocabGreen.filter((f) => refGreenIds.has(f.id));
+  const finalRed = vocabRed.filter((f) => refRedIds.has(f.id));
+
+  const orphanGreen = vocabGreen.length - finalGreen.length;
+  const orphanRed = vocabRed.length - finalRed.length;
+  if (orphanGreen > 0 || orphanRed > 0) {
+    console.warn('[evaluator] dropped orphan flag cards', {
+      sessionId,
+      question: `Q${questionNum}`,
+      orphanGreen,
+      orphanRed,
+    });
+  }
+
   return {
     ...q,
     answer_segments: cleanedSegments,
-    green_flags: keptGreen,
-    red_flags: keptRed,
+    green_flags: finalGreen,
+    red_flags: finalRed,
   };
 }
 
