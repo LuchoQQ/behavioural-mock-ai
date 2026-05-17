@@ -18,7 +18,7 @@ type Props = {
   autoStart?: boolean;
 };
 
-type Stage = 'pre-flight' | 'joining' | 'in-call' | 'wrap-up';
+type Stage = 'pre-flight' | 'joining' | 'in-call' | 'ending' | 'wrap-up';
 
 export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props) {
   // Autostart flow: landing already showed an intro hero, so jump straight to the
@@ -103,11 +103,12 @@ export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props
     },
     onDisconnect: () => {
       console.log('[interview] disconnected', { sessionId });
-      // Agent ended the call (it called end_interview after 3 Qs, or the
-      // candidate hit End, or the connection dropped). In all in-call cases
-      // we move to wrap-up so the candidate isn't stuck.
+      // Agent ended the call (it called end_call after the closing line,
+      // or the candidate hit End, or the connection dropped). In all
+      // in-call cases we move to the 'ending' fade so the candidate
+      // sees an intentional transition rather than an abrupt cut.
       if (!callConnectedRef.current) return;
-      setStage((s) => (s === 'in-call' ? 'wrap-up' : s));
+      setStage((s) => (s === 'in-call' ? 'ending' : s));
     },
     onError: (msg: string) => {
       console.error('[interview] error', { sessionId, msg });
@@ -131,10 +132,11 @@ export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props
     return () => clearInterval(id);
   }, [stage, isConnected]);
 
-  // While in-call, poll the session status. The agent's `end_interview` tool
-  // marks the session 'completed' server-side but does NOT close the WebRTC
-  // call by itself, so without this poll the candidate would stay on a dead
-  // line. When we see 'completed', tear down the call ourselves.
+  // Safety net for the agent's hang-up. The prompt instructs the agent
+  // to call `end_call` after `end_interview`, which closes the WebRTC
+  // cleanly via onDisconnect. If the LLM skips end_call, polling catches
+  // the session's 'completed' flag and we tear down the call ourselves
+  // so the candidate isn't left on a dead line.
   useEffect(() => {
     if (stage !== 'in-call' || !isConnected) return;
     let cancelled = false;
@@ -151,7 +153,7 @@ export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props
           } catch (err) {
             console.warn('[interview] endSession after auto-detect failed', err);
           }
-          setStage((s) => (s === 'in-call' ? 'wrap-up' : s));
+          setStage((s) => (s === 'in-call' ? 'ending' : s));
           return;
         }
       } catch (err) {
@@ -167,6 +169,14 @@ export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props
       if (timer) clearTimeout(timer);
     };
   }, [stage, isConnected, sessionId, conversation]);
+
+  // Brief fade between call-end and wrap-up so the disconnect feels
+  // intentional, not abrupt.
+  useEffect(() => {
+    if (stage !== 'ending') return;
+    const id = setTimeout(() => setStage('wrap-up'), 800);
+    return () => clearTimeout(id);
+  }, [stage]);
 
   const startSession = useCallback(async () => {
     if (sessionStartedRef.current) return;
@@ -204,7 +214,7 @@ export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props
     } catch (err) {
       console.error('[interview] end failed', { sessionId, err });
     } finally {
-      setStage('wrap-up');
+      setStage('ending');
     }
   }, [sessionId, conversation]);
 
@@ -282,6 +292,14 @@ export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props
           <InCall
             speaking={isSpeaking}
             connected={isConnected}
+            muted={muted}
+            camOn={camOn}
+            videoRef={videoRef}
+            camReady={camReady}
+          />
+        )}
+        {stage === 'ending' && (
+          <Ending
             muted={muted}
             camOn={camOn}
             videoRef={videoRef}
@@ -1098,6 +1116,96 @@ function InCall({
 
       <div style={{ padding: '16px 0 18px' }}>
         <StatusBanner speaking={speaking} connected={connected} />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Ending — brief fade between call-end and wrap-up
+// ============================================================
+function Ending({
+  muted,
+  camOn,
+  videoRef,
+  camReady,
+}: {
+  muted: boolean;
+  camOn: boolean;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  camReady: boolean;
+}) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        position: 'relative',
+        overflow: 'hidden',
+        background: '#050505',
+        padding: '24px 24px 0',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 18,
+          minHeight: 0,
+        }}
+      >
+        <AITile speaking={false} dim />
+        <YouTile
+          name="You"
+          muted={muted}
+          camOn={camOn}
+          camReady={camReady}
+          talking={false}
+          dim
+          videoRef={videoRef}
+        />
+      </div>
+      <div style={{ height: 80 }} />
+
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          background:
+            'radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.78) 65%, rgba(0,0,0,0.85) 100%)',
+          gap: 12,
+          animation: 'fadeIn .35s ease',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: 'var(--muted-foreground)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.22em',
+          }}
+        >
+          Interview complete
+        </span>
+        <span
+          style={{
+            fontSize: 14,
+            color: 'var(--muted-foreground)',
+            maxWidth: 360,
+            textAlign: 'center',
+            lineHeight: 1.5,
+          }}
+        >
+          Preparing your evaluation…
+        </span>
       </div>
     </div>
   );

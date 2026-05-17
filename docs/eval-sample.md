@@ -49,21 +49,18 @@ STAR PER-COMPONENT SCALE (`star_completeness` field):
 - "clear":   candidate provided specific, concrete information.
 
 RED FLAGS vs GREEN FLAGS:
-Each `Flag` object has a short `label` (snake_case identifier) and a
-`description` (1–2 sentences explaining why it fired on this candidate).
+Per-question `red_flags` / `green_flags` are `{ id, label, note }` cards
+that anchor to a flagged segment of the answer. Patterns are scoped to
+one answer — there is no session-level flag layer.
 
-- Per-question `red_flags` / `green_flags` are patterns specific to THAT
-  answer only.
-- Session-level `general_red_flags` / `general_green_flags` are patterns
-  that recur across two or more answers — e.g. always uses "we", always
-  quantifies impact, consistently badmouths past employers.
-
-Vocabulary (extend freely with new labels if a real pattern doesn't fit):
+LABEL VOCABULARY (closed list — picked from the bounded set below; if
+no label fits, omit the flag rather than invent a new one):
 - Red:   "badmouthed_employer", "took_undue_credit", "no_self_reflection",
          "rambled_no_structure", "evasive_on_specifics", "blamed_others",
          "we_focused_throughout", "no_quantified_impact_when_warranted".
-- Green: "clear_ownership", "quantified_impact", "strong_self_reflection",
-         "concrete_artifacts", "well_structured_star", "honest_about_tradeoffs".
+- Green: "clear_ownership", "quantified_impact", "concrete_artifacts",
+         "strong_self_reflection", "well_structured_star",
+         "honest_about_tradeoffs", "constructive_conflict".
 
 WORD/PHRASE IMPROVEMENTS (`word_improvements`):
 For each question, pick up to 8 of the candidate's actual phrases that
@@ -350,34 +347,6 @@ The LLM was forced to emit JSON matching the `FinalEval` Zod schema (`src/lib/sc
       ]
     }
   ],
-  "reviewer_notes": "The candidate presents as a technically credible backend/full-stack engineer with real experience on high-scale production systems. The standout answer is Q2, which is nearly recruiter-grade: specific metrics, clear personal ownership, concrete technical actions, and quantified business impact ($22K MRR protected, 80% error rate reduction). The main recurring gap is inconsistent quantification — Q1 and Q3 trail off into qualitative results despite the candidate clearly having access to numbers. A second pattern worth probing: the candidate tends to reframe adversity (a failure becomes a 'refinement'; a conflict resolves without pushback), which may indicate discomfort with vulnerability in interviews rather than a lack of real experience. Recommend probing Q3 with a follow-up: \"Was there a time the stakeholder pushed back on your proposal?\" to test conflict-navigation depth. Overall, this candidate would pass a screening for a mid-to-senior backend role, but should be coached to lead with metrics and own difficult moments more directly before advancing to technical rounds.",
-  "general_red_flags": [
-    {
-      "label": "no_quantified_impact_when_warranted",
-      "description": "In two of three answers (Q1 and Q3), the candidate described results qualitatively despite working on high-scale platforms where metrics were clearly available. Only Q2 delivered hard numbers consistently."
-    },
-    {
-      "label": "reframed_failure_or_conflict",
-      "description": "In both Q1 and Q3, the candidate softened the premise — calling a failure a 'refinement' and presenting a conflict that resolved without real friction. This pattern suggests some discomfort owning difficult situations directly."
-    }
-  ],
-  "general_green_flags": [
-    {
-      "label": "clear_ownership",
-      "description": "Across all three answers, the candidate predominantly used 'I' for key decisions and actions, demonstrating consistent personal accountability rather than hiding behind team framing."
-    },
-    {
-      "label": "concrete_artifacts",
-      "description": "The candidate named specific technologies (Lambda, Shopify, backfill scripts, component-based DB architecture) in every answer, signaling genuine hands-on experience rather than surface-level familiarity."
-    },
-    {
-      "label": "strong_self_reflection",
-      "description": "Each answer closed with a genuine lesson learned ('invest more time in data modeling', 'choose your battles', implicit in Q2), showing a growth mindset that is consistent across the session."
-    },
-    {
-      "label": "high_scale_context",
-      "description": "The candidate consistently worked on large-scale systems (300K subscriptions, #1 App Store app, largest airline client), which adds credibility and suggests comfort with production-grade engineering challenges."
-    }
-  ]
+  "reviewer_notes": "The candidate presents as a technically credible backend/full-stack engineer with real experience on high-scale production systems. The standout answer is Q2, which is nearly recruiter-grade: specific metrics, clear personal ownership, concrete technical actions, and quantified business impact ($22K MRR protected, 80% error rate reduction). The main recurring gap is inconsistent quantification — Q1 and Q3 trail off into qualitative results despite the candidate clearly having access to numbers. A second pattern worth probing: the candidate tends to reframe adversity (a failure becomes a 'refinement'; a conflict resolves without pushback), which may indicate discomfort with vulnerability in interviews rather than a lack of real experience. Recommend probing Q3 with a follow-up: \"Was there a time the stakeholder pushed back on your proposal?\" to test conflict-navigation depth. Overall, this candidate would pass a screening for a mid-to-senior backend role, but should be coached to lead with metrics and own difficult moments more directly before advancing to technical rounds."
 }
 ```

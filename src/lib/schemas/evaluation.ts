@@ -10,12 +10,6 @@ export type StarComponentT = z.infer<typeof StarComponent>;
 export const ScoreLevel = z.enum(['strong_no', 'no', 'yes', 'strong_yes']);
 export type ScoreLevelT = z.infer<typeof ScoreLevel>;
 
-export const Flag = z.object({
-  label: z.string(),
-  description: z.string(),
-});
-export type FlagT = z.infer<typeof Flag>;
-
 export const WordImprovement = z.object({
   original_phrase: z.string(),
   suggested_rewording: z.string(),
@@ -82,16 +76,6 @@ export const FinalEval = z.object({
     .array(PerQuestionEval)
     .min(1)
     .describe('REQUIRED. One entry per question evaluated.'),
-  general_red_flags: z
-    .array(Flag)
-    .describe(
-      'REQUIRED. Session-level red flag patterns recurring across two or more answers. Empty array if none.',
-    ),
-  general_green_flags: z
-    .array(Flag)
-    .describe(
-      'REQUIRED. Session-level green flag patterns recurring across two or more answers. Empty array if none.',
-    ),
   reviewer_notes: z
     .string()
     .default('')

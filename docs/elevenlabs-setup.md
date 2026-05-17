@@ -75,6 +75,25 @@ URL).
 - **URL**: `${PUBLIC_BASE_URL}/api/agent-tools/end-interview`
 - **Body**: `{ "session_id": "{{session_id}}" }`
 
+### `end_call` (built-in system tool)
+
+This one is NOT a webhook you host — it's a system tool baked into
+ElevenLabs. In the agent's **Tools** section, enable **End call**
+under "System tools".
+
+- **Description** (the agent reads this to decide when to call it):
+
+  > Hang up the call. Call this immediately after thanking the
+  > candidate at the end of the interview, or if the candidate
+  > explicitly asks to stop. Do NOT call this in the middle of the
+  > interview.
+
+Why this matters: without `end_call`, the agent finishes its closing
+line but leaves the WebRTC call open. The candidate then says "bye",
+the agent responds, and they loop. `end_call` makes the agent itself
+terminate the call right after the closing line, so the candidate
+transitions cleanly into the wrap-up screen.
+
 ## 8. Post-call webhook
 
 1. In the agent settings, find **Post-call webhook**.

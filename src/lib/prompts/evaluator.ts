@@ -103,18 +103,19 @@ Each item: \`{ id, label, note }\`.
 Per-question \`green_flags\` / \`red_flags\` are patterns specific to THAT
 answer only.
 
-SESSION-LEVEL flags (\`general_red_flags\` / \`general_green_flags\`) use
-the legacy \`{ label, description }\` shape and capture patterns that
-recur across two or more answers — always uses "we", consistently
-quantifies impact, consistently badmouths past employers, etc.
+LABEL VOCABULARY (closed list — do NOT invent):
+You MUST pick the \`label\` of every flag from the lists below. If no label
+in the list fits the pattern you observed, OMIT the flag rather than
+inventing a new label. It is better to surface fewer, well-categorized
+flags than many bespoke ones.
 
-Vocabulary suggestions (extend freely with new labels if a real pattern
-doesn't fit):
-- Red:   "badmouthed_employer", "took_undue_credit", "no_self_reflection",
-         "rambled_no_structure", "evasive_on_specifics", "blamed_others",
-         "we_focused_throughout", "no_quantified_impact_when_warranted".
-- Green: "clear_ownership", "quantified_impact", "strong_self_reflection",
-         "concrete_artifacts", "well_structured_star", "honest_about_tradeoffs".
+- Green (allowed values): "clear_ownership", "quantified_impact",
+  "concrete_artifacts", "strong_self_reflection", "well_structured_star",
+  "honest_about_tradeoffs", "constructive_conflict".
+- Red (allowed values): "badmouthed_employer", "took_undue_credit",
+  "no_self_reflection", "rambled_no_structure", "evasive_on_specifics",
+  "blamed_others", "we_focused_throughout",
+  "no_quantified_impact_when_warranted".
 
 IMPROVEMENT (\`improvement\` field — exactly ONE per question):
 The single highest-leverage thing this candidate could do differently on
@@ -161,10 +162,8 @@ not output any prose outside of the structured object. For each question,
 include \`short_label\` set to EXACTLY the value provided in the question
 header above (verbatim).
 
-CRITICAL — the output object MUST contain ALL FIVE top-level fields:
-\`per_question\`, \`general_red_flags\`, \`general_green_flags\`,
-\`reviewer_notes\`, and \`practice_areas\`. If a session-level array has
-no items, return an empty array, never omit the key. Omitting
+CRITICAL — the output object MUST contain ALL THREE top-level fields:
+\`per_question\`, \`reviewer_notes\`, and \`practice_areas\`. Omitting
 \`reviewer_notes\` or \`practice_areas\` is the most common failure mode —
 double-check before returning.`;
 }

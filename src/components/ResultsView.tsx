@@ -781,7 +781,7 @@ function FlagItem({
           transition: 'color .15s ease',
         }}
       >
-        {flag.label}
+        {formatFlagLabel(flag.label)}
       </div>
       <div
         style={{
@@ -1194,6 +1194,12 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
     ),
   };
   return <svg {...props}>{paths[name]}</svg>;
+}
+
+function formatFlagLabel(label: string): string {
+  const spaced = label.replace(/_/g, ' ').trim();
+  if (!spaced) return spaced;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function formatDate(iso: string): string {

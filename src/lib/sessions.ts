@@ -217,25 +217,18 @@ const SIMULATED_EVAL: FinalEvalT = {
       green_flags: [
         {
           id: 'g-clear-stakes',
-          label: 'Articulates stakes clearly',
+          label: 'concrete_artifacts',
           note: 'Names the concrete business risk up front.',
         },
       ],
       red_flags: [
         {
           id: 'r-late-tooling',
-          label: 'Late investment in tooling',
+          label: 'no_self_reflection',
           note: 'Acknowledges tooling gap but only in hindsight.',
         },
       ],
       improvement: 'Tighten the Action section with one or two specific decisions you made.',
-    },
-  ],
-  general_red_flags: [],
-  general_green_flags: [
-    {
-      label: 'Calm pacing',
-      description: 'Maintained a steady, deliberate cadence throughout the answer.',
     },
   ],
   reviewer_notes: 'Simulated session generated for UI testing.',

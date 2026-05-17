@@ -156,6 +156,16 @@ export async function POST(req: Request) {
       .orderBy(asc(sessionQuestions.order));
 
     if (questions.length === 0) {
+      // The candidate hung up before the agent asked anything, so there is
+      // nothing to evaluate. Mark the session failed so the wrap-up screen
+      // stops polling and shows the candidate why.
+      await db
+        .update(interviewSessions)
+        .set({
+          evaluationStatus: 'failed',
+          evaluationError: 'Interview ended before any questions were answered.',
+        })
+        .where(eq(interviewSessions.id, sid));
       return Response.json({ ok: true, note: 'no_session_questions' });
     }
 

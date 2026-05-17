@@ -82,6 +82,78 @@ function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
   return true;
 }
 
+// Bounded vocabulary for per-question flag labels. The prompt instructs the
+// model to pick from these lists only, but we enforce it here too so a
+// well-meaning hallucination doesn't pollute the cross-session pattern set.
+const ALLOWED_GREEN_LABELS = new Set<string>([
+  'clear_ownership',
+  'quantified_impact',
+  'concrete_artifacts',
+  'strong_self_reflection',
+  'well_structured_star',
+  'honest_about_tradeoffs',
+  'constructive_conflict',
+]);
+
+const ALLOWED_RED_LABELS = new Set<string>([
+  'badmouthed_employer',
+  'took_undue_credit',
+  'no_self_reflection',
+  'rambled_no_structure',
+  'evasive_on_specifics',
+  'blamed_others',
+  'we_focused_throughout',
+  'no_quantified_impact_when_warranted',
+]);
+
+// Drops any flag whose label is outside the bounded vocabulary, along with the
+// matching annotation on the segment that carried that flag's id. Segment
+// text is preserved — only the `flag`/`id` keys are stripped.
+function dropOffVocabFlags(
+  q: PerQuestionEvalT,
+  sessionId: string,
+  questionNum: number | string,
+): PerQuestionEvalT {
+  const droppedGreen = q.green_flags
+    .filter((f) => !ALLOWED_GREEN_LABELS.has(f.label))
+    .map((f) => f.label);
+  const droppedRed = q.red_flags
+    .filter((f) => !ALLOWED_RED_LABELS.has(f.label))
+    .map((f) => f.label);
+
+  if (droppedGreen.length === 0 && droppedRed.length === 0) return q;
+
+  console.warn('[evaluator] dropped off-vocab flags', {
+    sessionId,
+    question: `Q${questionNum}`,
+    droppedGreen,
+    droppedRed,
+  });
+
+  const keptGreen = q.green_flags.filter((f) => ALLOWED_GREEN_LABELS.has(f.label));
+  const keptRed = q.red_flags.filter((f) => ALLOWED_RED_LABELS.has(f.label));
+  const keptIds = new Set<string>([
+    ...keptGreen.map((f) => f.id),
+    ...keptRed.map((f) => f.id),
+  ]);
+
+  const cleanedSegments: AnswerSegmentT[] = q.answer_segments.map((s) => {
+    if (s.flag != null && s.id != null && !keptIds.has(s.id)) {
+      // Strip the annotation but keep the literal text so the transcript still
+      // reconstructs byte-for-byte.
+      return { t: s.t };
+    }
+    return s;
+  });
+
+  return {
+    ...q,
+    answer_segments: cleanedSegments,
+    green_flags: keptGreen,
+    red_flags: keptRed,
+  };
+}
+
 // When the LLM's answer_segments don't reconstruct the original transcript
 // byte-for-byte (it paraphrased, fixed a typo, normalized whitespace, etc.),
 // repair the question in place rather than failing the whole evaluation:
@@ -197,19 +269,26 @@ export async function evaluateSession(sessionId: string): Promise<void> {
   // Repair any per-question transcript divergence before the strict invariant
   // check. The LLM tends to normalize whitespace or fix typos in its segments —
   // costing us the whole evaluation under the original byte-for-byte rule.
+  // Then drop any flag whose label falls outside the bounded vocabulary, so
+  // cross-session pattern recognition stays meaningful.
   const repaired: FinalEvalT = {
     ...object,
     per_question: object.per_question.map((q) => {
       const expected = expectedByQuestionId.get(q.question_id);
-      if (expected == null) return q;
-      const reconstructed = q.answer_segments.map((s) => s.t).join('');
-      if (reconstructed === expected) return q;
       const num = orderByQuestionId.get(q.question_id) ?? '?';
-      console.warn('[evaluator] transcript divergence — repaired', {
-        sessionId,
-        question: `Q${num}`,
-      });
-      return repairDivergentQuestion(q, expected);
+      let next = q;
+      if (expected != null) {
+        const reconstructed = next.answer_segments.map((s) => s.t).join('');
+        if (reconstructed !== expected) {
+          console.warn('[evaluator] transcript divergence — repaired', {
+            sessionId,
+            question: `Q${num}`,
+          });
+          next = repairDivergentQuestion(next, expected);
+        }
+      }
+      next = dropOffVocabFlags(next, sessionId, num);
+      return next;
     }),
   };
 
