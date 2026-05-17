@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
 import { db } from '@/db/client';
@@ -7,6 +8,7 @@ import { verifyElevenLabsSignature } from '@/lib/elevenlabs-auth';
 import { evaluateSession } from '@/lib/evaluator';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const TurnSchema = z
   .object({
@@ -237,18 +239,30 @@ export async function POST(req: Request) {
       await db.insert(sessionResponses).values(rowsToInsert);
     }
 
-    try {
-      await evaluateSession(sid);
-    } catch (err) {
-      console.error('[api/agent-webhook/conversation-ended] eval_failed', { sessionId: sid, err });
-      await db
-        .update(interviewSessions)
-        .set({
-          evaluationStatus: 'failed',
-          evaluationError: err instanceof Error ? err.message : String(err),
-        })
-        .where(eq(interviewSessions.id, sid));
-    }
+    // Defer the AI evaluation past the response. ElevenLabs gets 200 right
+    // after responses are stored; the eval keeps running in the background
+    // for up to ~50s of the 60s function budget. If it exceeds that, we mark
+    // the session failed so the wrap-up screen can show an error instead of
+    // polling forever.
+    after(async () => {
+      try {
+        await Promise.race([
+          evaluateSession(sid),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('eval_timeout_50s')), 50_000),
+          ),
+        ]);
+      } catch (err) {
+        console.error('[api/agent-webhook/conversation-ended] eval_failed', { sessionId: sid, err });
+        await db
+          .update(interviewSessions)
+          .set({
+            evaluationStatus: 'failed',
+            evaluationError: err instanceof Error ? err.message : String(err),
+          })
+          .where(eq(interviewSessions.id, sid));
+      }
+    });
 
     return Response.json({ ok: true, inserted: rowsToInsert.length });
   } catch (err) {

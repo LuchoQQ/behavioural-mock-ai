@@ -11,9 +11,23 @@ import {
   type SessionStatusSnapshot,
 } from '@/lib/sessions';
 
-export async function startInterviewAction(): Promise<void> {
+const StartInput = z
+  .object({
+    camOn: z.boolean(),
+    muted: z.boolean(),
+  })
+  .optional();
+
+export async function startInterviewAction(input?: {
+  camOn: boolean;
+  muted: boolean;
+}): Promise<void> {
+  const parsed = StartInput.parse(input);
   const { id } = await createSession({ candidateName: null, candidateEmail: null });
-  redirect(`/mock/${id}?autostart=1`);
+  const params = new URLSearchParams({ autostart: '1' });
+  if (parsed && !parsed.camOn) params.set('cam', '0');
+  if (parsed?.muted) params.set('mic', '0');
+  redirect(`/mock/${id}?${params.toString()}`);
 }
 
 export async function simulateInterviewAction(): Promise<void> {

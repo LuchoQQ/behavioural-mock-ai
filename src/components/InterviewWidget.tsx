@@ -16,18 +16,26 @@ type Props = {
   agentId: string;
   sessionId: string;
   autoStart?: boolean;
+  initialCamOn?: boolean;
+  initialMuted?: boolean;
 };
 
 type Stage = 'pre-flight' | 'joining' | 'in-call' | 'ending' | 'wrap-up';
 
-export function InterviewWidget({ agentId, sessionId, autoStart = false }: Props) {
+export function InterviewWidget({
+  agentId,
+  sessionId,
+  autoStart = false,
+  initialCamOn = true,
+  initialMuted = false,
+}: Props) {
   // Autostart flow: landing already showed an intro hero, so jump straight to the
   // 5-second joining countdown (it kicks off startSession() when it lands at 0).
   // Direct nav: show the full pre-flight device check.
   const [stage, setStage] = useState<Stage>(autoStart ? 'joining' : 'pre-flight');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [muted, setMuted] = useState(false);
-  const [camOn, setCamOn] = useState(true);
+  const [muted, setMuted] = useState(initialMuted);
+  const [camOn, setCamOn] = useState(initialCamOn);
   const [elapsed, setElapsed] = useState('00:00');
   const startedAtRef = useRef<number | null>(null);
   const sessionStartedRef = useRef(false);
@@ -1606,11 +1614,76 @@ export function PreflightScreen({
   onStart,
   isConnecting,
   errorMessage,
+  camOn,
+  onToggleCam,
+  muted,
+  onToggleMute,
 }: {
   onStart: () => void;
   isConnecting: boolean;
   errorMessage: string | null;
+  camOn: boolean;
+  onToggleCam: () => void;
+  muted: boolean;
+  onToggleMute: () => void;
 }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [camReady, setCamReady] = useState(false);
+  const [camError, setCamError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!camOn) {
+      if (streamRef.current) {
+        for (const t of streamRef.current.getTracks()) t.stop();
+        streamRef.current = null;
+      }
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setCamReady(false);
+      setCamError(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
+        if (cancelled) {
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        setCamReady(true);
+        setCamError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Camera unavailable';
+        console.warn('[preflight] camera unavailable', msg);
+        setCamError(msg);
+        setCamReady(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [camOn]);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        for (const t of streamRef.current.getTracks()) t.stop();
+      }
+    };
+  }, []);
+
+  const showVideo = camOn && camReady;
+
   return (
     <div
       style={{
@@ -1660,7 +1733,7 @@ export function PreflightScreen({
           </h1>
           <p
             style={{
-              margin: '0 0 26px',
+              margin: '0 0 22px',
               fontSize: 15,
               lineHeight: 1.6,
               color: 'var(--muted-foreground)',
@@ -1671,6 +1744,35 @@ export function PreflightScreen({
             questions. Camera on so you see yourself the whole time —
             practice like it's the real one.
           </p>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              marginBottom: 22,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              onClick={onToggleMute}
+              aria-pressed={muted}
+              style={preflightToggle(muted)}
+            >
+              <Icon name={muted ? 'mic-off' : 'mic'} size={13} />
+              {muted ? 'Mic muted' : 'Mic on'}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleCam}
+              aria-pressed={!camOn}
+              style={preflightToggle(!camOn)}
+            >
+              <Icon name={camOn ? 'cam' : 'cam-off'} size={13} />
+              {camOn ? 'Camera on' : 'Camera off'}
+            </button>
+          </div>
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button
@@ -1721,15 +1823,48 @@ export function PreflightScreen({
             borderRadius: 18,
             overflow: 'hidden',
             border: '1px solid var(--border)',
-            background:
-              'radial-gradient(circle at 50% 45%, #1c1c1c 0%, #050505 100%)',
+            background: showVideo
+              ? '#0a0807'
+              : 'radial-gradient(circle at 50% 45%, #1c1c1c 0%, #050505 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
           }}
         >
-          <AIOrb speaking={false} size={200} />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: 'scaleX(-1)',
+              display: showVideo ? 'block' : 'none',
+            }}
+          />
+          {!showVideo && !camOn && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 10,
+                color: 'var(--muted-foreground)',
+                fontSize: 13,
+              }}
+            >
+              <Icon name="cam-off" size={26} />
+              Camera off
+            </div>
+          )}
+          {!showVideo && camOn && (
+            <AIOrb speaking={false} size={200} />
+          )}
           <div
             style={{
               position: 'absolute',
@@ -1752,15 +1887,55 @@ export function PreflightScreen({
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                background: '#9ca3af',
+                background: showVideo ? '#e8e8e8' : '#9ca3af',
               }}
             />
-            Silver AI · Idle
+            {showVideo ? 'You · Preview' : 'Silver AI · Idle'}
           </div>
+          {camOn && camError && !camReady && (
+            <div
+              style={{
+                position: 'absolute',
+                right: 16,
+                bottom: 16,
+                maxWidth: 240,
+                padding: '6px 10px',
+                borderRadius: 8,
+                background: 'rgba(0,0,0,0.65)',
+                fontSize: 11,
+                color: 'var(--muted-foreground)',
+                lineHeight: 1.4,
+              }}
+            >
+              Camera unavailable — you can still continue.
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function preflightToggle(active: boolean): React.CSSProperties {
+  return {
+    height: 32,
+    padding: '0 12px',
+    borderRadius: 999,
+    background: active
+      ? 'color-mix(in srgb, var(--destructive) 18%, transparent)'
+      : 'rgba(255,255,255,0.04)',
+    color: active ? '#ff8a8a' : 'var(--foreground)',
+    border: active
+      ? '1px solid color-mix(in srgb, var(--destructive) 45%, transparent)'
+      : '1px solid var(--border)',
+    fontSize: 12.5,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+  };
 }
 
 // ============================================================

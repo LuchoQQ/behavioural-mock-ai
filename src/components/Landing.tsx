@@ -19,12 +19,14 @@ export function Landing({ sessions }: Props) {
   const [isSimulating, startSimulateTransition] = useTransition();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [camOn, setCamOn] = useState(true);
+  const [muted, setMuted] = useState(false);
 
   const onStart = () => {
     setErrorMessage(null);
     startStartTransition(async () => {
       try {
-        await startInterviewAction();
+        await startInterviewAction({ camOn, muted });
       } catch (err) {
         setErrorMessage(err instanceof Error ? err.message : 'Failed to start interview');
       }
@@ -77,6 +79,10 @@ export function Landing({ sessions }: Props) {
           onStart={onStart}
           isConnecting={isStarting}
           errorMessage={errorMessage}
+          camOn={camOn}
+          onToggleCam={() => setCamOn((v) => !v)}
+          muted={muted}
+          onToggleMute={() => setMuted((v) => !v)}
         />
         <ScrollHint count={sessions.length} onClick={scrollToHistory} />
       </div>
